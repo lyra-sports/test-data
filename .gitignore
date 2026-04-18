@@ -117,5 +117,7 @@ dist
 
 # project-specific items
 *.js
-output/
+output/*
 !output/.gitkeep
+!output/comp-small.json
+!output/comp-large.json
