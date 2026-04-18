@@ -1,13 +1,6 @@
 import Chance from 'chance';
-import {DateTime} from 'luxon';
-import {
-  Unpacked,
-  groupByCount,
-  groupBy,
-  notEmpty,
-  randomFromList,
-  range,
-} from './utils';
+import { DateTime } from 'luxon';
+import { Unpacked, groupByCount, groupBy, notEmpty, randomFromList, range } from './utils';
 const chance = new Chance();
 
 const schema = 'https://schema.ijru.sport/v1.3.0/event.schema.json';
@@ -149,8 +142,8 @@ const EventDefinitions = [
 type EventDefinition = Unpacked<typeof EventDefinitions>;
 
 const EventDefinitionMap = EventDefinitions.reduce(
-  (prev, cur, index) => prev.set(cur.EventDefinitionCode, cur),
-  new Map<string, EventDefinition>()
+  (prev, cur) => prev.set(cur.EventDefinitionCode, cur),
+  new Map<string, EventDefinition>(),
 );
 
 const AllAroundEventDefinitions = [
@@ -185,23 +178,21 @@ const Subcompetitions = [
 function createParticipant(
   ParticipantID: number,
   firstBirthdate: DateTime,
-  lastBirthdate: DateTime
+  lastBirthdate: DateTime,
 ) {
   const gender = chance.gender() === 'Female' ? 'female' : 'male';
-  const birthdateOffset = Math.floor(
-    lastBirthdate.diff(firstBirthdate).as('days') * Math.random()
-  );
-  const birthdate = firstBirthdate.plus({days: birthdateOffset});
+  const birthdateOffset = Math.floor(lastBirthdate.diff(firstBirthdate).as('days') * Math.random());
+  const birthdate = firstBirthdate.plus({ days: birthdateOffset });
   const age = -birthdate.diffNow('years').years;
   const IsJudge = age >= 16; // make anyone 16 or older eligible to judge
-  const Roles = ["competitor"]
-  if (IsJudge) Roles.push("judge")
+  const Roles = ['competitor'];
+  if (IsJudge) Roles.push('judge');
   return {
     Key: ParticipantID.toString(),
     ParticipantID,
     MemberID: 1000 + ParticipantID,
     Birthdate: birthdate.valueOf(),
-    FirstName: chance.first({gender}),
+    FirstName: chance.first({ gender }),
     LastName: chance.last(),
     GenderID: gender === 'female' ? 1 : 0,
     Comments: null,
@@ -216,7 +207,7 @@ function createTeam(
   TeamID: number,
   numParticipants: number,
   firstBirthdate: DateTime,
-  lastBirthdate: DateTime
+  lastBirthdate: DateTime,
 ) {
   const prefixList = [
     'Admirable',
@@ -251,7 +242,7 @@ function createTeam(
     TeamID: TeamID,
     TeamName: `${randomFromList(prefixList)} ${chance.animal()}s`,
     Participants: range(numParticipants).map((n) =>
-      createParticipant(TeamID * 1000 + n, firstBirthdate, lastBirthdate)
+      createParticipant(TeamID * 1000 + n, firstBirthdate, lastBirthdate),
     ),
   };
 }
@@ -265,7 +256,7 @@ function createEvent(
   SubcompetitionID: number,
   GenderID: number,
   Entries: Array<Entry>,
-  IsAllAround: boolean
+  IsAllAround: boolean,
 ) {
   return {
     Key: EventID.toString(),
@@ -290,14 +281,14 @@ interface Entry {
   ParticipantEntries: {
     ParticipantID: number;
   }[];
-  AllAroundIncludedEntries: {CompEventEntryID: number; Key: string}[];
+  AllAroundIncludedEntries: { CompEventEntryID: number; Key: string }[];
 }
 
 function createEntry(
   CompEventEntryID: number,
   Team: Team,
   participants: Array<Participant>,
-  linkedAAEntries: Array<Entry>
+  linkedAAEntries: Array<Entry>,
 ) {
   return {
     Key: CompEventEntryID.toString(),
@@ -325,7 +316,7 @@ function createEntrySpec(
   Team: Team,
   Participants: Participant[],
   EventDefinition: EventDefinition,
-  ComponentAAEntrySpecs?: EntrySpec[]
+  ComponentAAEntrySpecs?: EntrySpec[],
 ) {
   return {
     EventDefinition,
@@ -344,12 +335,12 @@ const genderIDToCode: Record<number, string> = {
 function entrySpecsToEvents(
   entrySpecs: Array<EntrySpec>,
   ageGroups: Array<AgeGroup>,
-  ageCutoffDate: DateTime
+  ageCutoffDate: DateTime,
 ) {
   const entrySpecs2 = entrySpecs
     .map((es) => {
       const oldest = DateTime.fromMillis(
-        Math.min(...es.Participants.map((p) => Number(p.Birthdate)))
+        Math.min(...es.Participants.map((p) => Number(p.Birthdate))),
       );
       const maxParticipantAge = ageCutoffDate.diff(oldest, 'years').years;
       const validAgeGroups = ageGroups
@@ -359,14 +350,14 @@ function entrySpecsToEvents(
       const AgeGroup = validAgeGroups.length ? validAgeGroups[0] : null;
       const genders = es.Participants.map((p) => p.GenderID).reduce(
         (prev, cur) => prev.add(cur),
-        new Set<number>()
+        new Set<number>(),
       );
       const evGender =
         genders.has(0) && genders.has(1)
           ? 2 // mixed
           : genders.has(1)
-          ? 1
-          : 0;
+            ? 1
+            : 0;
       if (!AgeGroup) return null;
       return {
         ...es,
@@ -379,76 +370,64 @@ function entrySpecsToEvents(
   // group the entry specs to create events
   const entryGroups = groupBy(
     entrySpecs2,
-    (es) =>
-      `${es.EventDefinition.EventDefinitionCode}/${es.AgeGroup.AgeGroupCode}/${es.GenderID}`
+    (es) => `${es.EventDefinition.EventDefinitionCode}/${es.AgeGroup.AgeGroupCode}/${es.GenderID}`,
   );
   let nextEventID = 1;
   let nextEntryID = 1;
   const entryMap = new Map<EntrySpec, Entry>();
   const mapGroups = (eg: Unpacked<typeof entryGroups>) => {
-    const first = eg[0];
+    // groupBy always produces non-empty groups
+    const first = eg[0]!;
     console.log(
       `Creating ${first.EventDefinition.EventDefinitionCode} ${
         first.AgeGroup.AgeGroupName
-      } ${genderIDToCode[first.GenderID]} (${eg.length} entries)`
+      } ${genderIDToCode[first.GenderID]} (${eg.length} entries)`,
     );
     // create the entries in the event
     const entries = eg.map((en) => {
       const entryID = nextEntryID++;
       const components =
-        en.ComponentAAEntrySpecs?.map((ce) => entryMap.get(ce)).filter(
-          notEmpty
-        ) ?? [];
-      const thisEntry = createEntry(
-        entryID,
-        en.Team,
-        en.Participants,
-        components
-      );
+        en.ComponentAAEntrySpecs?.map((ce) => entryMap.get(ce)).filter(notEmpty) ?? [];
+      const thisEntry = createEntry(entryID, en.Team, en.Participants, components);
       entryMap.set(en.OldES, thisEntry);
       return thisEntry;
     });
+    // Subcompetitions always contains at least one entry
+    const subcompetition = Subcompetitions[0]!;
     return createEvent(
       nextEventID++,
       first.AgeGroup.AgeGroupID,
       first.EventDefinition,
-      Subcompetitions[0].SubcompetitionID,
+      subcompetition.SubcompetitionID,
       first.GenderID,
       entries,
-      first.EventDefinition.IsAllAround
+      first.EventDefinition.IsAllAround,
     );
   };
   // create AAs last because we need to get component IDs to link them into the AA entry
   console.log('Starting comp');
   const compEvents = entryGroups
-    .filter((eg) => eg[0].EventDefinition.IsAllAround === false)
+    .filter((eg) => eg[0]?.EventDefinition.IsAllAround === false)
     .map(mapGroups);
   console.log('Starting aa');
   const aaEvents = entryGroups
-    .filter((eg) => eg[0].EventDefinition.IsAllAround === true)
+    .filter((eg) => eg[0]?.EventDefinition.IsAllAround === true)
     .map(mapGroups);
   return [...compEvents, ...aaEvents];
 }
 
 // creates entry specs for a team for a specific AA type
-function createAAEntriesSpecForTeam(
-  team: Team,
-  aaEventDef: AllAroundEventDefinition
-) {
+function createAAEntriesSpecForTeam(team: Team, aaEventDef: AllAroundEventDefinition) {
   const aa = aaEventDef.AllAround;
   if (!aa || !aaEventDef.Components) return [];
   const groups = groupByCount(
     // sort by birthdate to cluster groups by age
-    team.Participants.sort(
-      (p1, p2) => p1.Birthdate.valueOf() - p2.Birthdate.valueOf()
-    ),
-    aa.NumParticipants
+    team.Participants.sort((p1, p2) => p1.Birthdate.valueOf() - p2.Birthdate.valueOf()),
+    aa.NumParticipants,
   );
   const entrySpecs = groups.map((pg) => {
     // create the compenent entries
-    const compEntrySpecs = aaEventDef.Components.map((comp) =>
-      createEntrySpec(team, pg, comp)
-    );
+    const compEntrySpecs = aaEventDef.Components.map((comp) => createEntrySpec(team, pg, comp));
     // create the AA entry
     const aaEntrySpec = createEntrySpec(team, pg, aa, compEntrySpecs);
     return [aaEntrySpec, ...compEntrySpecs];
@@ -460,7 +439,7 @@ function createAAEventsForCompetition(
   teams: Team[],
   aaEventDefs: AllAroundEventDefinition[],
   ageGroups: AgeGroup[],
-  ageCutoffDate: DateTime
+  ageCutoffDate: DateTime,
 ) {
   const entrySpecs = teams
     .map((t) => aaEventDefs.map((e) => createAAEntriesSpecForTeam(t, e)))
@@ -476,7 +455,7 @@ function createCompetition(
   CompetitionName: string,
   Teams: Array<Team>,
   Events: Array<Event>,
-  AgeCutoffDate: DateTime
+  AgeCutoffDate: DateTime,
 ) {
   return {
     Key: competitionID.toString(),
@@ -496,28 +475,21 @@ export function createDataFileContent(numTotalParticipants: number) {
   const ageCutoffDate = DateTime.utc();
   const minAge = 10;
   const maxAge = 20;
-  const ageToDate = (age: number) => ageCutoffDate.minus({years: age});
+  const ageToDate = (age: number) => ageCutoffDate.minus({ years: age });
   const firstBirthdate = ageToDate(maxAge);
   const lastBirthdate = ageToDate(minAge);
   const numTeams = Math.round(numTotalParticipants / numParticipantsPerTeam);
 
   const Teams = range(numTeams).map((n) =>
-    createTeam(n, numParticipantsPerTeam, firstBirthdate, lastBirthdate)
+    createTeam(n, numParticipantsPerTeam, firstBirthdate, lastBirthdate),
   );
-  const x = EventDefinitions.map((ed) => Teams.map((t) => 1));
   const Events = createAAEventsForCompetition(
     Teams,
     AllAroundEventDefinitions,
     AgeGroups,
-    ageCutoffDate
+    ageCutoffDate,
   );
-  const Competition = createCompetition(
-    3,
-    'Demo Competition',
-    Teams,
-    Events,
-    ageCutoffDate
-  );
+  const Competition = createCompetition(3, 'Demo Competition', Teams, Events, ageCutoffDate);
 
   return {
     $schema: schema,

@@ -118,3 +118,4 @@ dist
 # project-specific items
 *.js
 output/
+!output/.gitkeep
